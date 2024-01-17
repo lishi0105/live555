@@ -216,7 +216,7 @@ void BasicTaskScheduler::SingleStep(unsigned maxDelayTime) {
             if (mask == 0) mask = EVENT_TRIGGER_ID_HIGH_BIT;
 
 #ifndef NO_STD_LIB
-            if (fTriggersAwaitingHandling[i].test()) {
+            if (fTriggersAwaitingHandling[i].test_and_set()) {
                 fTriggersAwaitingHandling[i].clear();
 #else
             if (fTriggersAwaitingHandling[i]) {

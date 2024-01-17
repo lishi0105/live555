@@ -1,4 +1,4 @@
 INCLUDES = -Iinclude -I../UsageEnvironment/include -I../groupsock/include
-PREFIX = /usr/local
+PREFIX = ../install/BasicUsageEnvironment
 LIBDIR = $(PREFIX)/lib
 ##### Change the following for your environment:

@@ -23,20 +23,43 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include <GroupsockHelper.hh>
 
 #include "Base64.hh"
+#include "LiveLogger.hh"
 #include "RTSPCommon.hh"
 #include "RTSPRegisterSender.hh"
+#include "OnDemandServerMediaSubsession.hh"
 
 ////////// RTSPServer implementation //////////
 
+static int get_ip_and_port(const struct sockaddr* sa, char* ip, size_t ip_len,
+                           unsigned* port) {
+    memset(ip, 0, ip_len);
+    if (sa->sa_family == AF_INET) {  // IPv4
+        struct sockaddr_in* addr_in = (struct sockaddr_in*)sa;
+        inet_ntop(AF_INET, &(addr_in->sin_addr), ip, ip_len);
+        *port = (unsigned)(ntohs(addr_in->sin_port));
+        return 1;
+    } else if (sa->sa_family == AF_INET6) {  // IPv6
+        struct sockaddr_in6* addr_in6 = (struct sockaddr_in6*)sa;
+        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ip, ip_len);
+        *port = (unsigned)(ntohs(addr_in6->sin6_port));
+        return 1;
+    }
+
+    strcpy(ip, "Unknown AF");
+    *port = 0;
+    return 0;
+}
+
 RTSPServer* RTSPServer::createNew(UsageEnvironment& env, Port ourPort,
                                   UserAuthenticationDatabase* authDatabase,
-                                  unsigned reclamationSeconds) {
+                                  unsigned reclamationSeconds,
+                                  const char* suffix) {
     int ourSocketIPv4 = setUpOurSocket(env, ourPort, AF_INET);
     int ourSocketIPv6 = setUpOurSocket(env, ourPort, AF_INET6);
     if (ourSocketIPv4 < 0 && ourSocketIPv6 < 0) return NULL;
 
     return new RTSPServer(env, ourSocketIPv4, ourSocketIPv6, ourPort,
-                          authDatabase, reclamationSeconds);
+                          authDatabase, reclamationSeconds, suffix);
 }
 
 Boolean RTSPServer::lookupByName(UsageEnvironment& env, char const* name,
@@ -88,8 +111,8 @@ char* RTSPServer::rtspURLPrefix(int clientSocket, Boolean useIPv6) const {
         getsockname(clientSocket, (struct sockaddr*)&ourAddress, &namelen);
     }
 
-    char urlBuffer[100];  // more than big enough for
-                          // "rtsp://<ip-address>:<port>/"
+    char urlBuffer[128] = {
+        0};  // more than big enough for "rtsp://<ip-address>:<port>/"
 
     char const* addressPrefixInURL =
         ourAddress.ss_family == AF_INET6 ? "[" : "";
@@ -198,6 +221,7 @@ RTSPServer::RTSPServer(UsageEnvironment& env, int ourSocketIPv4,
       fHTTPServerSocketIPv6(-1),
       fHTTPServerPort(0),
       fClientConnectionsForHTTPTunneling(NULL),  // will get created if needed
+      fClientConnectCallback(NULL),
       fTCPStreamingDatabase(HashTable::create(ONE_WORD_HASH_KEYS)),
       fPendingRegisterOrDeregisterRequests(
           HashTable::create(ONE_WORD_HASH_KEYS)),
@@ -206,6 +230,36 @@ RTSPServer::RTSPServer(UsageEnvironment& env, int ourSocketIPv4,
       fAllowStreamingRTPOverTCP(True),
       fOurConnectionsUseTLS(False),
       fWeServeSRTP(False) {}
+
+RTSPServer::RTSPServer(UsageEnvironment& env, int ourSocketIPv4,
+                       int ourSocketIPv6, Port ourPort,
+                       UserAuthenticationDatabase* authDatabase,
+                       unsigned reclamationSeconds, const char* suffix)
+    : GenericMediaServer(env, ourSocketIPv4, ourSocketIPv6, ourPort,
+                         reclamationSeconds),
+      fHTTPServerSocketIPv4(-1),
+      fHTTPServerSocketIPv6(-1),
+      fHTTPServerPort(0),
+      fClientConnectionsForHTTPTunneling(NULL),  // will get created if needed
+      fClientConnectCallback(NULL),
+      fTCPStreamingDatabase(HashTable::create(ONE_WORD_HASH_KEYS)),
+      fPendingRegisterOrDeregisterRequests(
+          HashTable::create(ONE_WORD_HASH_KEYS)),
+      fRegisterOrDeregisterRequestCounter(0),
+      fAuthDB(authDatabase),
+      fAllowStreamingRTPOverTCP(True),
+      fOurConnectionsUseTLS(False),
+      fWeServeSRTP(False){
+    memset(fUrlSuffix, 0, sizeof(fUrlSuffix));
+    if (suffix == NULL) return;
+    if (strlen(suffix) > sizeof(fUrlSuffix) - 1) {
+        LIVE_LOG(ERROR) << "RTSPServer::rtspURLSuffix() suffix is too long, "
+                           "max length is 63\n";
+        return;
+    }
+    LIVE_LOG(INFO) << "RTSPServer::rtspURLSuffix() suffix:" << suffix;
+    strcpy(fUrlSuffix, suffix);
+}
 
 // A data structure that is used to implement "fTCPStreamingDatabase"
 // (and the "noteTCPStreamingOnSocket()" and "stopTCPStreamingOnSocket()" member
@@ -560,14 +614,19 @@ void RTSPServer::RTSPClientConnection::handleCmd_redirect(
 }
 
 void RTSPServer::RTSPClientConnection::handleCmd_notFound() {
+    LIVE_LOG(WARN) << "RTSPServer::RTSPClientConnection::handleCmd_notFound()";
     setRTSPResponse("404 Stream Not Found");
 }
 
 void RTSPServer::RTSPClientConnection::handleCmd_sessionNotFound() {
+    LIVE_LOG(WARN)
+        << "RTSPServer::RTSPClientConnection::handleCmd_sessionNotFound()";
     setRTSPResponse("454 Session Not Found");
 }
 
 void RTSPServer::RTSPClientConnection::handleCmd_unsupportedTransport() {
+    LIVE_LOG(WARN)
+        << "RTSPServer::RTSPClientConnection::handleCmd_unsupportedTransport()";
     setRTSPResponse("461 Unsupported Transport");
 }
 
@@ -1441,9 +1500,17 @@ RTSPServer::RTSPClientSession ::RTSPClientSession(RTSPServer& ourServer,
       fStreamAfterSETUP(False),
       fTCPStreamIdCount(0),
       fNumStreamStates(0),
-      fStreamStates(NULL) {}
+      fStreamStates(NULL) {
+    memset(clientIpAddr, 0, sizeof(clientIpAddr));
+}
 
-RTSPServer::RTSPClientSession::~RTSPClientSession() { reclaimStreamStates(); }
+RTSPServer::RTSPClientSession::~RTSPClientSession() {
+    reclaimStreamStates();
+    if (fOurRTSPServer.fClientConnectCallback != NULL) {
+        fOurRTSPServer.fClientConnectCallback(clientIpAddr, clientPort, False);
+    }
+    LIVE_LOG(WARN) << clientIpAddr << " " << clientPort << " logout";
+}
 
 void RTSPServer::RTSPClientSession::deleteStreamByTrack(unsigned trackNum) {
     if (trackNum >= fNumStreamStates) return;  // sanity check; shouldn't happen
@@ -1583,6 +1650,14 @@ void RTSPServer::RTSPClientSession ::handleCmd_SETUP(
     fOurServer.lookupServerMediaSession(streamName,
                                         SETUPLookupCompletionFunction1, this,
                                         fOurServerMediaSession == NULL);
+
+    get_ip_and_port((struct sockaddr*)&ourClientConnection->fClientAddr,
+                    clientIpAddr, sizeof(clientIpAddr), &clientPort);
+
+    if (fOurRTSPServer.fClientConnectCallback != NULL) {
+        fOurRTSPServer.fClientConnectCallback(clientIpAddr, clientPort, True);
+    }
+    LIVE_LOG(INFO) << clientIpAddr << ":" << clientPort << " login";
 }
 
 void RTSPServer::RTSPClientSession ::SETUPLookupCompletionFunction1(

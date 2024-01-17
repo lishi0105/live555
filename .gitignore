@@ -1,0 +1,50 @@
+Debug
+Release
+build
+install
+live-test/build
+live-test/3rdparty/ffmpeg
+*.json
+*.ini
+*.o
+*.*_bak
+.vscode
+.VSCodeCounter
+**/*.slo
+**/*.lo
+**/*.o
+**/*.a
+**/*.so
+**/*.obj
+**/Makefile
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+

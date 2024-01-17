@@ -5,6 +5,10 @@ GROUPSOCK_DIR = groupsock
 USAGE_ENVIRONMENT_DIR = UsageEnvironment
 BASIC_USAGE_ENVIRONMENT_DIR = BasicUsageEnvironment
 
+RTSPCLIENT_DIR = liveRtspClient
+
+RTSPSERVER_DIR = liveRtspServer
+
 TESTPROGS_DIR = testProgs
 
 MEDIA_SERVER_DIR = mediaServer
@@ -12,6 +16,8 @@ MEDIA_SERVER_DIR = mediaServer
 PROXY_SERVER_DIR = proxyServer
 
 HLS_PROXY_DIR = hlsProxy
+
+.PHONY: force
 
 all:
 	cd $(LIVEMEDIA_DIR) ; $(MAKE)
@@ -22,10 +28,12 @@ all:
 	cd $(MEDIA_SERVER_DIR) ; $(MAKE)
 	cd $(PROXY_SERVER_DIR) ; $(MAKE)
 	cd $(HLS_PROXY_DIR) ; $(MAKE)
+	cd $(RTSPCLIENT_DIR) ; $(MAKE)
+	cd $(RTSPSERVER_DIR) ; $(MAKE)
 	@echo
 	@echo "For more information about this source code (including your obligations under the LGPL), please see our FAQ at http://live555.com/liveMedia/faq.html"
 
-install:
+install: force
 	cd $(LIVEMEDIA_DIR) ; $(MAKE) install
 	cd $(GROUPSOCK_DIR) ; $(MAKE) install
 	cd $(USAGE_ENVIRONMENT_DIR) ; $(MAKE) install
@@ -34,6 +42,8 @@ install:
 	cd $(MEDIA_SERVER_DIR) ; $(MAKE) install
 	cd $(PROXY_SERVER_DIR) ; $(MAKE) install
 	cd $(HLS_PROXY_DIR) ; $(MAKE) install
+	cd $(RTSPCLIENT_DIR) ; $(MAKE) install
+	cd $(RTSPSERVER_DIR) ; $(MAKE) install
 
 clean:
 	cd $(LIVEMEDIA_DIR) ; $(MAKE) clean
@@ -44,11 +54,16 @@ clean:
 	cd $(MEDIA_SERVER_DIR) ; $(MAKE) clean
 	cd $(PROXY_SERVER_DIR) ; $(MAKE) clean
 	cd $(HLS_PROXY_DIR) ; $(MAKE) clean
+	cd $(RTSPCLIENT_DIR) ; $(MAKE) clean
+	cd $(RTSPSERVER_DIR) ; $(MAKE) clean
+	rm -rf $(HLS_PROXY_DIR)/$(PREFIX)
 
 distclean: clean
-	-rm -f $(LIVEMEDIA_DIR)/Makefile $(GROUPSOCK_DIR)/Makefile \
+	-rm -rf $(LIVEMEDIA_DIR)/Makefile $(GROUPSOCK_DIR)/Makefile \
 	  $(USAGE_ENVIRONMENT_DIR)/Makefile $(BASIC_USAGE_ENVIRONMENT_DIR)/Makefile \
 	  $(TESTPROGS_DIR)/Makefile $(MEDIA_SERVER_DIR)/Makefile \
 	  $(PROXY_SERVER_DIR)/Makefile \
 	  $(HLS_PROXY_DIR)/Makefile \
+	  $(RTSPCLIENT_DIR)/Makefile \
+	  $(RTSPSERVER_DIR)/Makefile \
 	  Makefile

@@ -273,6 +273,7 @@ static ServerMediaSession* createNewSMS(UsageEnvironment& env,
             sms->addSubsession(smss);
         }
     }
-
+    
+    env << "create new SMS ok...\n";
     return sms;
 }

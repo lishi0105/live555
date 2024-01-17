@@ -31,9 +31,10 @@ RTSPClient* RTSPClient::createNew(UsageEnvironment& env, char const* rtspURL,
                                   int verbosityLevel,
                                   char const* applicationName,
                                   portNumBits tunnelOverHTTPPortNum,
-                                  int socketNumToServer) {
+                                  int socketNumToServer, Boolean bRtpOverTcp) {
     return new RTSPClient(env, rtspURL, verbosityLevel, applicationName,
-                          tunnelOverHTTPPortNum, socketNumToServer);
+                          tunnelOverHTTPPortNum, socketNumToServer,
+                          bRtpOverTcp);
 }
 
 unsigned RTSPClient::sendDescribeCommand(responseHandler* responseHandler,
@@ -58,6 +59,16 @@ unsigned RTSPClient::sendAnnounceCommand(char const* sdpDescription,
     return sendRequest(new RequestRecord(++fCSeq, "ANNOUNCE", responseHandler,
                                          NULL, NULL, False, 0.0, 0.0, 0.0,
                                          sdpDescription));
+}
+
+unsigned RTSPClient::sendSetupCommand_v1(MediaSubsession& subsession,
+                                         responseHandler* responseHandler,
+                                         Boolean streamOutgoing,
+                                         Boolean forceMulticastOnUnspecified,
+                                         Authenticator* authenticator) {
+    return sendSetupCommand(subsession, responseHandler, streamOutgoing,
+                            fRtpOverTcp, forceMulticastOnUnspecified,
+                            authenticator);
 }
 
 unsigned RTSPClient::sendSetupCommand(MediaSubsession& subsession,
@@ -484,13 +495,15 @@ unsigned RTSPClient::responseBufferSize =
 
 RTSPClient::RTSPClient(UsageEnvironment& env, char const* rtspURL,
                        int verbosityLevel, char const* applicationName,
-                       portNumBits tunnelOverHTTPPortNum, int socketNumToServer)
+                       portNumBits tunnelOverHTTPPortNum, int socketNumToServer,
+                       Boolean bRtpOverTcp)
     : Medium(env),
       desiredMaxIncomingPacketSize(0),
       fVerbosityLevel(verbosityLevel),
       fCSeq(1),
       fAllowBasicAuthentication(True),
       fTunnelOverHTTPPortNum(tunnelOverHTTPPortNum),
+      fRtpOverTcp(bRtpOverTcp),
       fUserAgentHeaderStr(NULL),
       fUserAgentHeaderStrLen(0),
       fInputSocketNum(-1),
@@ -2619,10 +2632,11 @@ HandlerServerForREGISTERCommand::~HandlerServerForREGISTERCommand() {
 
 RTSPClient* HandlerServerForREGISTERCommand ::createNewRTSPClient(
     char const* rtspURL, int verbosityLevel, char const* applicationName,
-    int socketNumToServer) {
+    int socketNumToServer, Boolean bRtpOverTcp) {
     // Default implementation: create a basic "RTSPClient":
     return RTSPClient::createNew(envir(), rtspURL, verbosityLevel,
-                                 applicationName, 0, socketNumToServer);
+                                 applicationName, 0, socketNumToServer,
+                                 bRtpOverTcp);
 }
 
 char const* HandlerServerForREGISTERCommand::allowedCommandNames() {

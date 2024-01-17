@@ -1,0 +1,4 @@
+INCLUDES = -Iinclude -I../UsageEnvironment/include  -I../BasicUsageEnvironment/include -I../liveMedia/include  -I../groupsock/include
+PREFIX = ../install/liveRtspServer
+LIBDIR = $(PREFIX)/lib
+##### Change the following for your environment:
